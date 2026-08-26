@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+
+  worker:
+    build: .
+    command: taskforge worker start --backend redis://redis:6379 --count 4
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      TASKFORGE_REDIS_URL: redis://redis:6379
+      TASKFORGE_WORKER_COUNT: "4"
+
+  dashboard:
+    build: .
+    command: taskforge dashboard start --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      TASKFORGE_REDIS_URL: redis://redis:6379
+
+volumes:
+  redis_data:
